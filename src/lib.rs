@@ -523,6 +523,8 @@ impl JsonRepairParser {
         let mut needs_comma = false;
 
         loop {
+            let pos_before = self.pos; // Safety check for infinite loops
+
             self.skip_whitespace();
             self.skip_comments();
             self.skip_whitespace();
@@ -560,6 +562,12 @@ impl JsonRepairParser {
                     self.parse_value()?;
                     needs_comma = true;
                 }
+            }
+
+            // Safety check: ensure we're making progress
+            if self.pos == pos_before && self.pos < self.input.len() {
+                // We're stuck - advance one character to avoid infinite loop
+                self.advance();
             }
         }
 
@@ -808,6 +816,24 @@ mod tests {
         // Array with single trailing comma only
         let result = repair_json(r#"[1, 2, 3]"#, &options).unwrap();
         assert_eq!(result, r#"[1,2,3]"#);
+    }
+
+    #[test]
+    fn test_array_with_colon_does_not_loop() {
+        let options = RepairOptions::default();
+
+        let result = repair_json(r#"{"filepath":"a","edits":[old_string":"x"#, &options).unwrap();
+        let parsed: Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.is_object());
+    }
+
+    #[test]
+    fn test_array_with_object_closer_does_not_loop() {
+        let options = RepairOptions::default();
+
+        let result = repair_json(r#"{"items":[}"#, &options).unwrap();
+        let parsed: Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.is_object());
     }
 
     #[test]
